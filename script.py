@@ -1,7 +1,12 @@
+#coding=utf-8
+
 import json
 import MySQLdb
+import time
+from random import randint as random
 from string import ascii_lowercase as letters
 from urllib2 import urlopen
+from bs4 import BeautifulSoup
 
 try:
 	file = open('/var/www/html/knoop/CourseProfRatings/dbCredentials').read()
@@ -19,45 +24,45 @@ conn = MySQLdb.connect(host = "localhost",
 x = conn.cursor()
 
 
-site = list("http://search.mtvnservices.com/typeahead/suggest/?solrformat=true&rows=10&callback=jQuery1110039665828784927726_1453392246657&q=*%3A*+AND+schoolid_s%3A1426+AND+teacherlastname_engram%3Aa&defType=edismax&qf=teacherfullname_t%5E1000+autosuggest&bf=pow(total_number_of_ratings_i%2C2.1)&sort=&siteName=rmp&rows=100&start=0&fl=pk_id+teacherfirstname_t+teacherlastname_t+total_number_of_ratings_i+averageratingscore_rf+schoolid_s")
+site = list("http://search.mtvnservices.com/typeahead/suggest/?solrformat=true&rows=10&callback=jQuery1110039665828784927726_1453392246657&q=*%3A*+AND+schoolid_s%3A1426+AND+teacherlastname_engram%3Aa&defType=edismax&qf=teacherfullname_t%5E1000+autosuggest&bf=pow(total_number_of_ratings_i%2C2.1)&sort=&siteName=rmp&rows=200&start=0&fl=pk_id+teacherfirstname_t+teacherlastname_t+total_number_of_ratings_i")
 
 
-'''
-for char in letters:
-	site[186] = char
-	data = urlopen("".join(site)).read()
-	results = data[43:-2] #remove leading and trailing non json data
-	parsed_json = json.loads(results)
-	break
-'''
-for char in letters:
-	site[186] = char
-	data = urlopen("".join(site)).read()
-	results = data[43:-2] #remove leading and trailing non json data
-	parsed_json = json.loads(results)
-	prof_data = parsed_json["response"]["docs"][0]
-	statement = "INSERT INTO profDetails (LastName, FirstInitial, LinkID) VALUES ('%s', '%c', '%d');" % (prof_data["teacherlastname_t"], prof_data["teacherfirstname_t"][:1], prof_data["pk_id"])
-	x.execute(statement)
-	conn.commit()
-	break
-	
-
-'''try:
+pk_id = 0
+curLetter = 'a'
+try:
 	for char in letters:
-		site[186] = char
+		curLetter = char
+		site[185] = char
 		data = urlopen("".join(site)).read()
 		results = data[43:-2] #remove leading and trailing non json data
 		parsed_json = json.loads(results)
-		prof_data = parsed_json["response"]["docs"][0]
-		statement = "INSERT INTO profDetails VALUES (%s, %c, %d)" % (prof_data["teacherlastname_t"], prof_data["teacherfirstname_t"][:1], prof_data["pk_id"])
-		x.execute(statement)
-		conn.commit()
-		break
-
+		for prof in parsed_json["response"]["docs"]:
+			pk_id = prof["pk_id"]
+			try:
+				if prof["total_number_of_ratings_i"] != 0:
+					wait = random(1,25)
+					time.sleep(wait)
+					ratingSite = "http://www.ratemyprofessors.com/ShowRatings.jsp?tid=%s" %prof["pk_id"]
+					html_Doc = urlopen(ratingSite);
+					soup = BeautifulSoup(html_Doc, 'html.parser')
+					if soup.find(class_="headline") == None:
+						ratings = []
+						for div in soup.find(class_="faux-slides").find_all(class_="rating"):
+							ratings.append(div.string)
+						statement = "INSERT INTO profDetails VALUES ('%d', '%s', '%s', '%s', '%s', '%s');" % (prof["pk_id"], prof["teacherlastname_t"], prof["teacherfirstname_t"], ratings[0], ratings[1], ratings[2])
+						x.execute(statement)
+						conn.commit()
+				else:
+					statement = "INSERT INTO profDetails VALUES ('%d', '%s', '%s', NULL, NULL, NULL);" % (prof["pk_id"], prof["teacherlastname_t"], prof["teacherfirstname_t"])
+					x.execute(statement)
+					conn.commit()
+			except:
+				print "Error was caused by SQL statement: " + statement
 except:
 	conn.rollback()
 	conn.close()
-	print "There was an error inserting into the database"
+	print "There was a fatal error on prof with pk_id: %d" %pk_id
+	print "The current letter is: %c" %curLetter
 	exit()
-'''
+
 conn.close()
